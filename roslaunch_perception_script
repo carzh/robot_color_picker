@@ -1,0 +1,3 @@
+#!/bin/bash
+
+roslaunch interbotix_xsarm_perception xsarm_perception.launch robot_model:=rx200 use_pointcloud_tuner_gui:=true use_armtag_tuner_gui:=true
