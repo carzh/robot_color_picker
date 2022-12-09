@@ -3,7 +3,6 @@ import colorsys
 from interbotix_xs_modules.arm import InterbotixManipulatorXS
 from interbotix_perception_modules.armtag import InterbotixArmTagInterface
 from interbotix_perception_modules.pointcloud import InterbotixPointCloudInterface
-#from transformers import AutoModel
 
 from transformers import BertTokenizer, BertForMultipleChoice
 import torch
@@ -11,10 +10,13 @@ import torch
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 model = BertForMultipleChoice.from_pretrained("bert-base-uncased")
 
-# This script uses a color/depth camera to get the arm to find blocks and sort them by color.
+# This script uses a color/depth camera to get the arm to find blocks, and point to them 
+# depending on the user's command in natural language. The user can either input a color literal
+# i.e. "red" or "green", or a word or phrase to be parsed into a color using BERT.
+#
 # For this demo, the arm is placed to the right of the camera facing outward. When the
-# end-effector is located at x=0, y=0.3, z=0.2 w.r.t. the 'wx200/base_link' frame, the AR
-# tag should be clearly visible to the camera. Four small baskets should also be placed in front and to the right of the arm.
+# end-effector is located at x=0, y=0.3, z=0.2 w.r.t. the 'rx200/base_link' frame, the AR
+# tag should be clearly visible to the camera.
 #
 # To get started, open a terminal and type 'roslaunch interbotix_xsarm_perception xsarm_perception.launch robot_model:=wx200'
 # Then change to this directory and type 'python color_sorter.py'
@@ -31,17 +33,7 @@ def main():
     bot.arm.set_ee_pose_components(x=0.3, z=0.2)
     bot.gripper.open()
 
-    # get the ArmTag pose
-    bot.arm.set_ee_pose_components(y=0.3, z=0.2)
-    time.sleep(0.5)
-    armtag.find_ref_to_arm_base_transform()
-    bot.arm.set_ee_pose_components(x=0.3, z=0.2)
-
-    # get the cluster positions
-    # sort them from max to min 'x' position w.r.t. the 'wx200/base_link' frame
-
-    #model = AutoModel.from_pretrained("prajjwal1/bert-tiny")
-
+    # Run until "quit" command is entered
     while True:
         prompt = input('Give me an input! ')
 
@@ -50,7 +42,7 @@ def main():
             bot.arm.go_to_sleep_pose()
             exit()
         elif prompt.lower() == "armtag":
-            # get the ArmTag pose
+            # get the ArmTag pose for camera calibration to the robot's position
             bot.arm.set_ee_pose_components(y=0.3, z=0.2)
             time.sleep(0.5)
             armtag.find_ref_to_arm_base_transform()
@@ -72,14 +64,17 @@ def main():
         elif "purple" in prompt.lower():
             target_color = "purple"
         else:
+            # Use BERT for multiple choice to determine what color the user inputted
             r = "red"
             o = "orange"
             y = "yellow"
             g = "green"
             b = "blue"
             v = "purple"
-            labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
-            choices = [r, o, y, b]
+            labels = torch.tensor(0).unsqueeze(0)
+            # We don't use all the colors since this drastically lowers the accuracy
+            # of the BERT model, using up to 3 seems to work decently well
+            choices = [r, b] # [r, o, y, g, b, v]
             prompts = [prompt] * len(choices)
 
             encoding = tokenizer(prompts, choices, return_tensors="pt", padding=True)
@@ -88,31 +83,39 @@ def main():
             target_color = choices[logits.argmax().item()]
             print(target_color)
 
-
+        # Identify all clusters using camera
         success, clusters = pcl.get_cluster_positions(ref_frame="rx200/base_link", sort_axis="y", reverse=True)
 
-        # pick up all the objects and drop them in baskets
+        # Search through all the clusters and see if any match specified color
         found_color = False
         for cluster in clusters:
             clr = color_compare(cluster["color"])
 
+            # If the cluster's color is correct
             if (clr == target_color):
-                print("fOUND TARGET COLOR!!!!1! YAYYYYY")
+                print("Found target cluster!")
                 x, y, z = cluster["position"]
+                bot.arm.set_ee_pose_components(x=x, y=y, z=0.15, pitch=0)
                 bot.arm.set_ee_pose_components(x=x, y=y, z=0.1, pitch=0.5)
-                time.sleep(3)
+
+                time.sleep(2)
                 found_color = True
 
+                bot.arm.set_ee_pose_components(x=x, y=y, z=0.15, pitch=0)
+
         if found_color == False:
-            print("i didnt find the color :( now im sad")
+            print("I didnt find the color :( now im sad")
+
+            # Robot "shakes its head"
             bot.arm.set_ee_pose_components(x=0.3, y=-0.15, z=0.15, pitch=0.1)
             bot.arm.set_ee_pose_components(x=0.3, y=0.15, z=0.15, pitch=0.1)
             bot.arm.set_ee_pose_components(x=0.3, y=-0.15, z=0.15, pitch=0.1)
             bot.arm.set_ee_pose_components(x=0.3, y=0.15, z=0.15, pitch=0.1)
 
+        # Reset to "default" position
         bot.arm.set_ee_pose_components(x=0.3, z=0.2)
 
-# determines the color of each object using the Hue value in the HSV color space
+# Determines the color of each object using the Hue value in the HSV color space
 def color_compare(rgb):
     r,g,b = [x/255.0 for x in rgb]
     h,s,v = colorsys.rgb_to_hsv(r,g,b)
@@ -126,7 +129,7 @@ def color_compare(rgb):
     elif h > 0.9: color = "red"
     else: color = "unknown"
 
-    print(color, h)
+    # print(color, h)
 
     return color
 
