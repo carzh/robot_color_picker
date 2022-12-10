@@ -25,7 +25,7 @@ First, run the `armtag` command to have the robot move its armtag into view of t
 
 ## Requirements
 
-Install the appropriate torch version and the relevant interbotix packages (specifically, [interbotix_xs](https://github.com/Interbotix/interbotix_ros_manipulators) and [the interbotix library for perception](https://github.com/Interbotix/interbotix_ros_manipulators/tree/galactic/interbotix_ros_xsarms/interbotix_xsarm_perception)). Optionally, run `pip install -r requirements.txt`, or, alternatively, install transformers. 
+Install the appropriate torch version and the relevant interbotix packages (specifically, [interbotix_xs](https://github.com/Interbotix/interbotix_ros_manipulators) and [the interbotix library for perception](https://github.com/Interbotix/interbotix_ros_manipulators/tree/galactic/interbotix_ros_xsarms/interbotix_xsarm_perception)). Then, either run `pip install -r requirements.txt`, or, alternatively, install transformers. 
 
 ## Notes & troubleshooting
 
